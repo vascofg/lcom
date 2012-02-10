@@ -15,26 +15,22 @@
 static void vbe_unpack_mode_info(void *buf, vbe_mode_info_t *dst);
 
 int vbe_get_mode_info(unsigned short mode, vbe_mode_info_t *vmi_p) {
-	/* (1) Declarar variáveis */
-		struct reg86u r;
-		mmap_t address;
-		/* (2) Alocar memoria */
-		lm_init();
-		lm_alloc(VBE_MODE_INFO_BLOCK_SIZE, &address);
-		/* (3) Definir a estrutura de registos */
-		r.u.b.ah=0x4f;
-		r.u.b.al=0x01;
-		r.u.w.es = PB2BASE(address.phys); /* Endereço Base */
-		r.u.w.di = PB2OFF(address.phys); /* Offset */
-		r.u.b.intno = 0x10;
-		r.u.w.cx = 1 << 14 | mode;
-		/* (4) Fazer a interrupção na VBIOS */
-		sys_int86(&r);
-		/* (5) Passar a informação para a estrutura do VMI */
-		vbe_unpack_mode_info(address.virtual, vmi_p);
-		/* (6) Libertar memória */
-		lm_free(&address);
-		return 1;
+  
+	struct reg86u registers;
+	mmap_t address;
+
+	lm_init();
+	lm_alloc(VBE_MODE_INFO_BLOCK_SIZE, &address);
+	registers.u.b.ah = 0x4F;
+	registers.u.b.al = 0x01;
+	registers.u.w.es = PB2BASE(address.phys);
+	registers.u.w.di = PB2OFF(address.phys);
+	registers.u.b.intno = 0x10;
+	registers.u.w.cx = 1 << 14 | mode;
+	sys_int86(&registers);
+	vbe_unpack_mode_info(address.virtual, vmi_p);
+	lm_free(&address);
+	return 1;
 }
 
 typedef struct {

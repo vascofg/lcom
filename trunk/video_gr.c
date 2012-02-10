@@ -9,8 +9,8 @@
 /* Constants for VBE 0x105 mode */
 
 #define VRAM_PHYS_ADDR    0xD0000000
-#define H_RES             1024
-#define V_RES		  768
+#define H_RES             800
+#define V_RES		  600
 #define BITS_PER_PIXEL	  8
 
 /* Private global variables */
@@ -22,66 +22,99 @@ static unsigned vres;		/* Vertical screen resolution in pixels */
 static unsigned bits_per_pixel; /* Number of VRAM bits per pixel */
 
 void * vg_init(unsigned long mode) {
-	/* (1) Declarar vari√°veis */
-	struct reg86u r;
+
+	struct reg86u registers;
 	struct mem_range range;
 	vbe_mode_info_t vmi;
-	/* (2) Definir estrutura */
-	r.u.b.intno = 0x10;
-	r.u.b.ah = 0x4F;
-	r.u.b.al = 0x02;
-	r.u.w.bx = 1 << 14 | mode;
-	sys_int86(&r);
-	/* (3) Obter InformaÁıes*/
+	registers.u.b.intno = 0x10;
+	registers.u.b.ah = 0x4F;
+	registers.u.b.al = 0x02;
+	registers.u.w.bx = 1 << 14 | mode;
+	sys_int86(&registers);
 	vbe_get_mode_info(mode, &vmi);
-	/* (4) Definir o espaÁo de endereÁamento */
 	range.mr_base = vmi.PhysBasePtr;
-	range.mr_limit = range.mr_base + vmi.XResolution * vmi.YResolution
-	*(vmi.BitsPerPixel / 8);
-	/* (5) Entrar em modo previlegiado */
+	range.mr_limit = range.mr_base + vmi.XResolution * vmi.YResolution *(vmi.BitsPerPixel / 8);
 	sys_privctl(SELF, SYS_PRIV_ADD_MEM, &range);
-	/* OBJECTIVO FINAL: mapear o endere√ßo para o video_mem */
-	video_mem = vm_map_phys(SELF, (void *) range.mr_base, vmi.XResolution
-	* vmi.YResolution * (vmi.BitsPerPixel / 8));
-	/* (6) Alterar vari·veis globais */
-	hres = vmi.YResolution;
-	vres = vmi.XResolution;
+	video_mem = vm_map_phys(SELF, (void *) range.mr_base, vmi.XResolution * vmi.YResolution * (vmi.BitsPerPixel / 8));
+	vres = vmi.YResolution;
+	hres = vmi.XResolution;
 	bits_per_pixel = vmi.BitsPerPixel;
+	vg_fill(00);
+	return NULL;
 }
 
 int vg_fill(unsigned long color) {
-	int i,j;
-	for (i=0; i<=vres; i++)
-		for (j=0; j<=hres; j++){
-		vg_set_pixel(i,j,color);
-		}
+	int i;
+	if(color<0)
+		return 1;
+	for(i=0;i<hres*vres;i++)
+	{
+		*(video_mem+i)=color;
+	}
 	return 0;
 }
 
 int vg_set_pixel(unsigned long x, unsigned long y, unsigned long color) {
-	*(video_mem+y*hres+x)=color;
+	int pos;
+	if(y>vres-1||x>hres-1||x<0||y<0||color<0)
+	{
+		  return -1;
+	}
+	pos=(x+y*hres);
+	*(video_mem+pos)=color;
 	return 0;
 }
 
 long vg_get_pixel(unsigned long x, unsigned long y) {
-	return *(video_mem + y * hres + x);
+	int pos;
+	if(y>vres-1||x>hres-1||x<0||y<0)
+	{
+		  return -1;
+	}
+	pos=(x+y*hres);
+	return *(video_mem+pos);
 }
 
-int vg_draw_line(unsigned long xi, unsigned long yi, unsigned long xf, unsigned long yf, unsigned long color) {
-	int i,j,aux;
-	/* Swap values if needed */
-	if (xf<xi & yf<yi){
-		aux=xf;
-		xf=xi;
-		xi=aux;
-		aux=yf;
-		yf=yi;
-		yi=aux;
+int vg_draw_line(unsigned long xi, unsigned long yi, 
+		 unsigned long xf, unsigned long yf, unsigned long color) {
+	int pos, temp, i;
+	float m, b, y;
+	if(yi>vres-1||yf>vres-1||xi>hres-1||xf>hres-1||xi<0||xf<0||yi<0||yf<0||color<0)
+	{
+		  return 1;
 	}
-	for (i=xi,j=yi; i<xf; i++){
-			vg_set_pixel(i,j,color);
-			if (yf>yi) j++;
-		}
+
+	if(xf<xi)
+	{
+		temp=xf;
+		xf=xi;
+		xi=temp;
+	}
+	if(yf<yi)
+	{
+		temp=yf;
+		yf=yi;
+		yi=temp;
+	}
+	if(xi==xf)
+	{
+		for (i=0; i<yf-yi; i++)
+			vg_set_pixel(xi, yi+i, color);
+		return 0;
+	}
+	if(yi==yf)
+	{
+		for (i=0; i<xf-xi; i++)
+			vg_set_pixel(xi+i, yi, color);
+		return 0;
+	}
+	m=(float)(yf-yi)/(float)(xf-xi);
+	b=yi-m*xi;
+	for(i=xi;i<=xf;i++)
+	{
+		y=m*i+b;
+		vg_set_pixel(i,y,color);
+	}
 
 	return 0;
 }
@@ -99,4 +132,7 @@ int vg_exit() {
       return 1;
   } else
       return 0;
+}
+
+void printChar(unsigned long x, unsigned long y, char ch, unsigned long fg, unsigned long bg){
 }
